@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom'; // useNavigate for redirection
-import Markdown from 'react-markdown';
 
 const Home = () => {
   const [query, setQuery] = useState('');
-  const [content, setContent] = useState('');
+  const [content, setContent] = useState([]); // Ensure content is an array by default
   const [loading, setLoading] = useState(false); // Loader state
   const navigate = useNavigate(); // Initialize useNavigate hook
 
@@ -19,60 +18,76 @@ const Home = () => {
   }, [navigate]);
 
   const handleSearch = async () => {
-    setLoading(true); // Show loader
-    const token = localStorage.getItem('token'); // Get JWT token from localStorage
-
+    setLoading(true);
+    const token = localStorage.getItem('token');
+  
     try {
       const response = await axios.post(
-        'http://127.0.0.1:8000/query', 
+        'http://127.0.0.1:8000/query',
         { query },
         {
           headers: {
-            Authorization: `Bearer ${token}`, // Pass the token in the Authorization header
+            Authorization: `Bearer ${token}`,
           },
         }
       );
-      
-      console.log(response.data);
-      // Ensure content is a string
-      const contentString = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
-      setContent(contentString);
+  
+      console.log(response.data); // Check what the response contains
+  
+      // Check if response contains articles (array) or a string (raw output)
+      if (Array.isArray(response.data.articles)) {
+        setContent({ articles: response.data.articles });
+      } else if (typeof response.data.output === 'string') {
+        setContent({ output: response.data.output });
+      } else {
+        setContent([]); // Fallback for empty or unexpected data
+      }
+  
     } catch (error) {
       console.error("Error fetching the news:", error);
-      setContent('An error occurred. Please try again.');
+      setContent([]); // Reset content on error
     }
-    setLoading(false); // Hide loader
+    setLoading(false);
   };
+  
 
   const renderContent = (data) => {
-    if (typeof data !== 'string') {
-      return <p className="text-red-500">Invalid data format received.</p>;
-    }
-    
-    // Split the content by double newlines to separate news items
-    const contentArray = data.split(/\n\s*\n/); // Handles potential extra spaces/newlines
-
-    return contentArray.map((item, index) => {
-      // Extract title, link, image URL, and description using regex
-      const titleMatch = item.match(/title:\s*(.+)/);
-      const linkMatch = item.match(/link:\s*(https?:\/\/[^\s]+)/);
-      const imageUrlMatch = item.match(/image:\s*(https?:\/\/[^\s]+)/);
-      const descriptionMatch = item.match(/description:\s*(.+)/);
-
-      return (
-        <div key={index} className="my-4 p-4 bg-white rounded-md shadow-md">
-          {titleMatch && <h2 className="text-2xl font-bold text-purple-700">{titleMatch[1]}</h2>}
-          {descriptionMatch && <p className="my-2 text-gray-700">{descriptionMatch[1]}</p>}
-          {imageUrlMatch && <img src={imageUrlMatch[1]} alt="news" className="w-full rounded-md shadow-md my-4" />}
-          {linkMatch && (
-            <a href={linkMatch[1]} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline">
+    // If articles are present, render them
+    if (data.articles && Array.isArray(data.articles) && data.articles.length > 0) {
+      return data.articles.map((item, index) => (
+        <div key={index} className="my-4 p-4 bg-gray-300 rounded-md shadow-md">
+          <h2 className="text-2xl font-bold text-purple-700">{item.title}</h2>
+          <p className="my-2 text-gray-700">{item.description}</p>
+          {item.image_url && (
+            <img src={item.image_url} alt={item.title} className="w-full rounded-md shadow-md my-4" />
+          )}
+          {item.url && (
+            <button
+              onClick={() => window.open(item.url, '_blank', 'noopener,noreferrer')}
+              className="text-purple-600 hover:underline"
+            >
               Read more
-            </a>
+            </button>
           )}
         </div>
+      ));
+    }
+  
+    // If raw output (string) is present, render it as a summary
+    if (data.output) {
+      return (
+        <div className="my-4 p-4 bg-gray-300 rounded-md shadow-md">
+          <h2 className="text-2xl font-bold text-purple-700">Summary</h2>
+          <pre className="my-2 text-gray-700 whitespace-pre-wrap">{data.output}</pre>
+        </div>
       );
-    });
+    }
+  
+    // Fallback if no articles or output
+    return <p>No news available for your query.</p>;
   };
+  
+  
 
   return (
     <div className="relative flex justify-center">
@@ -102,7 +117,6 @@ const Home = () => {
             </div>
           ) : (
             <div className="space-y-6">
-              <Markdown>{content}</Markdown>
               {renderContent(content)}
             </div>
           )}
